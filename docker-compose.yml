@@ -1,0 +1,13 @@
+# Quick-start deployment: runs the Admin Web Console as a 4th container
+# alongside a2z-backend's postgres/redis/api on the same EC2 instance,
+# reachable on port 8081. This is the fast path — see README.md for the
+# production path (S3 + CloudFront) from the architecture doc.
+services:
+  frontend:
+    build:
+      context: .
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+    ports:
+      - "8081:80"
+    restart: unless-stopped
