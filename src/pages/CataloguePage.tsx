@@ -13,10 +13,13 @@ type ProductRow = {
   stockQuantity: number;
 };
 
-const emptyForm = { sku: "", name: "", priceCents: "0", currency: "SGD", initialStock: "0" };
+type CategoryRow = { id: string; name: string };
+
+const emptyForm = { sku: "", name: "", priceCents: "0", currency: "SGD", initialStock: "0", categoryId: "" };
 
 export function CataloguePage() {
   const [products, setProducts] = useState<ProductRow[] | null>(null);
+  const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -31,6 +34,9 @@ export function CataloguePage() {
   }
 
   useEffect(load, []);
+  useEffect(() => {
+    apiClient.get<CategoryRow[]>("/api/v1/admin/catalogue/categories").then((res) => setCategories(res.data));
+  }, []);
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
@@ -42,6 +48,7 @@ export function CataloguePage() {
         priceCents: Number(form.priceCents),
         currency: form.currency,
         initialStock: Number(form.initialStock),
+        categoryId: form.categoryId || null,
       });
       setForm(emptyForm);
       setShowAdd(false);
@@ -74,6 +81,21 @@ export function CataloguePage() {
           <LabeledInput label="Price (cents)" value={form.priceCents} onChange={(v) => setForm({ ...form, priceCents: v })} type="number" />
           <LabeledInput label="Currency" value={form.currency} onChange={(v) => setForm({ ...form, currency: v })} />
           <LabeledInput label="Initial stock" value={form.initialStock} onChange={(v) => setForm({ ...form, initialStock: v })} type="number" />
+          <label style={{ fontSize: 11, color: colors.textSecondary }}>
+            <span style={{ display: "block", marginBottom: 4 }}>Category</span>
+            <select
+              value={form.categoryId}
+              onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+              style={{ padding: "6px 8px", borderRadius: 6, border: `0.5px solid ${colors.border}`, fontSize: 12, width: 160, height: 32 }}
+            >
+              <option value="">— None —</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </label>
           <button type="submit" disabled={saving} style={{ background: "#378ADD", color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", height: 32 }}>
             {saving ? "Saving..." : "Save"}
           </button>
