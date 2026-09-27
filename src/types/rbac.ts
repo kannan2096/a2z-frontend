@@ -3,6 +3,7 @@
 export type Role = "SUPER_ADMIN" | "ADMIN" | "MANAGER" | "SUPPORT_STAFF";
 
 export type Permission =
+  | "CATALOGUE_VIEW"
   | "CATALOGUE_WRITE"
   | "INVENTORY_WRITE"
   | "ORDER_VIEW"

@@ -6,7 +6,7 @@ import { useAuth } from "@/auth/AuthContext";
 
 const NAV_ITEMS = [
   { to: "/", label: "Dashboard", need: null },
-  { to: "/catalogue", label: "Catalogue", need: "CATALOGUE_WRITE" as const },
+  { to: "/catalogue", label: "Catalogue", need: "CATALOGUE_VIEW" as const },
   { to: "/orders", label: "Orders", need: "ORDER_VIEW" as const },
   { to: "/staff", label: "Staff & roles", need: "STAFF_MANAGE" as const },
 ] as const;
