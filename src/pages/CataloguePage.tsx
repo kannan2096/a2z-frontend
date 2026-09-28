@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { colors } from "@/theme/colors";
 import { PermissionGate } from "@/components/PermissionGate";
 import { apiClient } from "@/api/client";
+import { badge, button, card, h1, input, pageHeader, table } from "@/theme/ui";
+import { useAuth } from "@/auth/AuthContext";
 
 type ProductRow = {
   id: string;
@@ -9,6 +11,7 @@ type ProductRow = {
   name: string;
   priceCents: number;
   currency: string;
+  categoryId: string | null;
   categoryName: string | null;
   stockQuantity: number;
 };
@@ -16,14 +19,22 @@ type ProductRow = {
 type CategoryRow = { id: string; name: string };
 
 const emptyForm = { sku: "", name: "", priceCents: "0", currency: "SGD", initialStock: "0", categoryId: "" };
+const LOW_STOCK_THRESHOLD = 5;
 
 export function CataloguePage() {
+  const { hasPermission } = useAuth();
+  const canWrite = hasPermission("CATALOGUE_WRITE");
+
   const [products, setProducts] = useState<ProductRow[] | null>(null);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", priceCents: "0", currency: "SGD", categoryId: "", stockQuantity: "0" });
+  const [editSaving, setEditSaving] = useState(false);
 
   function load() {
     setError(null);
@@ -41,6 +52,7 @@ export function CataloguePage() {
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
+    setError(null);
     try {
       await apiClient.post("/api/v1/admin/catalogue/products", {
         sku: form.sku,
@@ -60,95 +72,176 @@ export function CataloguePage() {
     }
   }
 
+  function startEdit(p: ProductRow) {
+    setEditForm({
+      name: p.name,
+      priceCents: String(p.priceCents),
+      currency: p.currency,
+      categoryId: p.categoryId ?? "",
+      stockQuantity: String(p.stockQuantity),
+    });
+    setEditingId(p.id);
+    setError(null);
+  }
+
+  async function saveEdit(productId: string) {
+    setEditSaving(true);
+    setError(null);
+    try {
+      await apiClient.put(`/api/v1/admin/catalogue/products/${productId}`, {
+        name: editForm.name,
+        priceCents: Number(editForm.priceCents),
+        currency: editForm.currency,
+        categoryId: editForm.categoryId || null,
+        stockQuantity: Number(editForm.stockQuantity),
+      });
+      setEditingId(null);
+      load();
+    } catch {
+      setError("Couldn't save changes to that product.");
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1 style={{ fontSize: 18, fontWeight: 600, color: colors.textPrimary }}>Catalogue</h1>
+      <div style={pageHeader}>
+        <div>
+          <h1 style={h1}>Catalogue</h1>
+          <p style={{ fontSize: 13, color: colors.textMuted, marginTop: 4 }}>Products, pricing, and stock levels.</p>
+        </div>
         <PermissionGate need="CATALOGUE_WRITE">
-          <button
-            onClick={() => setShowAdd((v) => !v)}
-            style={{ background: "#D4537E", color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
-          >
-            {showAdd ? "Cancel" : "Add product"}
+          <button onClick={() => setShowAdd((v) => !v)} style={button.accent}>
+            {showAdd ? "Cancel" : "+ Add product"}
           </button>
         </PermissionGate>
       </div>
 
       {showAdd && (
-        <form onSubmit={handleAdd} style={{ display: "flex", gap: 8, alignItems: "flex-end", marginTop: 16, padding: 12, background: colors.surface, border: `0.5px solid ${colors.border}`, borderRadius: 8, flexWrap: "wrap" }}>
+        <form onSubmit={handleAdd} style={{ ...card, display: "flex", gap: 10, alignItems: "flex-end", padding: 16, marginBottom: 16, flexWrap: "wrap" }}>
           <LabeledInput label="SKU" value={form.sku} onChange={(v) => setForm({ ...form, sku: v })} required />
           <LabeledInput label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
           <LabeledInput label="Price (cents)" value={form.priceCents} onChange={(v) => setForm({ ...form, priceCents: v })} type="number" />
           <LabeledInput label="Currency" value={form.currency} onChange={(v) => setForm({ ...form, currency: v })} />
           <LabeledInput label="Initial stock" value={form.initialStock} onChange={(v) => setForm({ ...form, initialStock: v })} type="number" />
-          <label style={{ fontSize: 11, color: colors.textSecondary }}>
-            <span style={{ display: "block", marginBottom: 4 }}>Category</span>
-            <select
-              value={form.categoryId}
-              onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-              style={{ padding: "6px 8px", borderRadius: 6, border: `0.5px solid ${colors.border}`, fontSize: 12, width: 160, height: 32 }}
-            >
-              <option value="">— None —</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button type="submit" disabled={saving} style={{ background: "#378ADD", color: "#fff", border: "none", borderRadius: 8, padding: "8px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", height: 32 }}>
+          <LabeledSelect label="Category" value={form.categoryId} onChange={(v) => setForm({ ...form, categoryId: v })} categories={categories} />
+          <button type="submit" disabled={saving} style={{ ...button.primary, height: 34 }}>
             {saving ? "Saving..." : "Save"}
           </button>
         </form>
       )}
 
-      {error && <p style={{ fontSize: 12, color: colors.danger, marginTop: 12 }}>{error}</p>}
+      {error && (
+        <div style={{ ...card, padding: "10px 14px", borderColor: "#EAC7C7", marginBottom: 12 }}>
+          <p style={{ fontSize: 12.5, color: colors.danger, margin: 0 }}>{error}</p>
+        </div>
+      )}
 
-      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 16, fontSize: 13 }}>
-        <thead>
-          <tr style={{ textAlign: "left", color: colors.textSecondary, fontSize: 11, textTransform: "uppercase" }}>
-            <th style={thStyle}>SKU</th>
-            <th style={thStyle}>Name</th>
-            <th style={thStyle}>Category</th>
-            <th style={thStyle}>Price</th>
-            <th style={thStyle}>Stock</th>
-          </tr>
-        </thead>
-        <tbody>
-          {products?.map((p) => (
-            <tr key={p.id} style={{ borderTop: `0.5px solid ${colors.border}` }}>
-              <td style={tdStyle}>{p.sku}</td>
-              <td style={tdStyle}>{p.name}</td>
-              <td style={tdStyle}>{p.categoryName ?? "—"}</td>
-              <td style={tdStyle}>
-                {p.currency} {(p.priceCents / 100).toFixed(2)}
-              </td>
-              <td style={tdStyle}>{p.stockQuantity}</td>
+      <div style={table.wrap}>
+        <table style={table.el}>
+          <thead>
+            <tr style={table.theadRow}>
+              <th style={table.th}>SKU</th>
+              <th style={table.th}>Name</th>
+              <th style={table.th}>Category</th>
+              <th style={table.th}>Price</th>
+              <th style={table.th}>Stock</th>
+              {canWrite && <th style={table.th}></th>}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {products?.map((p) =>
+              editingId === p.id ? (
+                <tr key={p.id} style={{ background: "#FCFBF6" }}>
+                  <td style={table.td}>{p.sku}</td>
+                  <td style={table.td}>
+                    <input style={{ ...input, width: 140 }} value={editForm.name} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} />
+                  </td>
+                  <td style={table.td}>
+                    <select style={{ ...input, width: 140 }} value={editForm.categoryId} onChange={(e) => setEditForm({ ...editForm, categoryId: e.target.value })}>
+                      <option value="">— None —</option>
+                      {categories.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td style={table.td}>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <input style={{ ...input, width: 70 }} value={editForm.currency} onChange={(e) => setEditForm({ ...editForm, currency: e.target.value })} />
+                      <input type="number" style={{ ...input, width: 90 }} value={editForm.priceCents} onChange={(e) => setEditForm({ ...editForm, priceCents: e.target.value })} />
+                    </div>
+                  </td>
+                  <td style={table.td}>
+                    <input type="number" style={{ ...input, width: 70 }} value={editForm.stockQuantity} onChange={(e) => setEditForm({ ...editForm, stockQuantity: e.target.value })} />
+                  </td>
+                  <td style={table.td}>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button onClick={() => saveEdit(p.id)} disabled={editSaving} style={button.primary}>
+                        {editSaving ? "Saving…" : "Save"}
+                      </button>
+                      <button onClick={() => setEditingId(null)} style={button.ghost}>
+                        Cancel
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                <tr key={p.id}>
+                  <td style={table.td}>{p.sku}</td>
+                  <td style={{ ...table.td, fontWeight: 600, color: colors.textPrimary }}>{p.name}</td>
+                  <td style={table.td}>
+                    {p.categoryName ? <span style={badge(colors.pastelPurple, colors.textOnPurple)}>{p.categoryName}</span> : <span style={{ color: colors.textMuted }}>—</span>}
+                  </td>
+                  <td style={table.td}>
+                    {p.currency} {(p.priceCents / 100).toFixed(2)}
+                  </td>
+                  <td style={table.td}>
+                    {p.stockQuantity <= LOW_STOCK_THRESHOLD ? <span style={badge("#F9D9DE", colors.danger)}>{p.stockQuantity} left</span> : p.stockQuantity}
+                  </td>
+                  {canWrite && (
+                    <td style={table.td}>
+                      <button onClick={() => startEdit(p)} style={button.ghost}>
+                        Edit
+                      </button>
+                    </td>
+                  )}
+                </tr>
+              )
+            )}
+          </tbody>
+        </table>
 
-      {products?.length === 0 && <p style={{ fontSize: 12, color: colors.textMuted, marginTop: 12 }}>No products yet.</p>}
-      {products === null && !error && <p style={{ fontSize: 12, color: colors.textMuted, marginTop: 12 }}>Loading…</p>}
+        {products?.length === 0 && <p style={{ fontSize: 12.5, color: colors.textMuted, padding: 16 }}>No products yet.</p>}
+        {products === null && !error && <p style={{ fontSize: 12.5, color: colors.textMuted, padding: 16 }}>Loading…</p>}
+      </div>
     </div>
   );
 }
 
 function LabeledInput({ label, value, onChange, type = "text", required = false }: { label: string; value: string; onChange: (v: string) => void; type?: string; required?: boolean }) {
   return (
-    <label style={{ fontSize: 11, color: colors.textSecondary }}>
+    <label style={{ fontSize: 11, color: colors.textSecondary, fontWeight: 500 }}>
       <span style={{ display: "block", marginBottom: 4 }}>{label}</span>
-      <input
-        type={type}
-        required={required}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{ padding: "6px 8px", borderRadius: 6, border: `0.5px solid ${colors.border}`, fontSize: 12, width: 120 }}
-      />
+      <input type={type} required={required} value={value} onChange={(e) => onChange(e.target.value)} style={{ ...input, width: 120 }} />
     </label>
   );
 }
 
-const thStyle: React.CSSProperties = { padding: "6px 8px" };
-const tdStyle: React.CSSProperties = { padding: "8px 8px" };
+function LabeledSelect({ label, value, onChange, categories }: { label: string; value: string; onChange: (v: string) => void; categories: CategoryRow[] }) {
+  return (
+    <label style={{ fontSize: 11, color: colors.textSecondary, fontWeight: 500 }}>
+      <span style={{ display: "block", marginBottom: 4 }}>{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)} style={{ ...input, width: 160, height: 34 }}>
+        <option value="">— None —</option>
+        {categories.map((c) => (
+          <option key={c.id} value={c.id}>
+            {c.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
